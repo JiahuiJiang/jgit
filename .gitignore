@@ -10,3 +10,9 @@ bazel-jgit
 bazel-out
 bazel-testlogs
 *~
+
+# IntelliJ
+*.iml
+*.ipr
+*.iws
+.idea/
