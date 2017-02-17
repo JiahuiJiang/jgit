@@ -1,24 +1,29 @@
 package org.eclipse.jgit.internal.storage.dfs;
 
 import com.github.benmanes.caffeine.cache.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 public final class DfsBlockCaffeineCache extends DfsBlockCache {
+
+    private static final Logger log = LoggerFactory.getLogger(DfsBlockCaffeineCache.class);
 
     /** Pack files smaller than this size can be copied through the cache. */
     private final long maxStreamThroughCache;
 
     /**
-     * Suggested block size to read from pack files in.
+     * Suggested block size to read from pack files in bytes.
      * <p>
      * If a pack file does not have a native block size, this size will be used.
      * <p>
      * If a pack file has a native size, a whole multiple of the native size
      * will be used until it matches this size.
      * <p>
-     * The value for blockSize must be a power of 2.
+     * The value for blockSize must be a power of 2 and no less than 512.
      */
     private final int blockSize;
 
@@ -28,7 +33,6 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
     /** Cache of Dfs blocks. */
     private final Cache<DfsPackKeyWithPosition, Ref> dfsBlockCache;
 
-
     private DfsBlockCaffeineCache(DfsBlockCaffeineCacheConfig cacheConfig) {
         // this is an estimation since it's hard to evaluation the actual size of the indices in packFiles
         long cacheEntrySize = (cacheConfig.getCacheMaximumSize() / cacheConfig.getBlockSize()) / 2;
@@ -37,9 +41,13 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
 
         blockSize = cacheConfig.getBlockSize();
 
+        // TODO: register the cache and expose the stats
         packFileCache = Caffeine.newBuilder()
-                .removalListener((DfsPackDescription description, DfsPackFile packFile, RemovalCause cause) ->
-                        packFile.close())
+                .removalListener((DfsPackDescription description, DfsPackFile packFile, RemovalCause cause) -> {
+                    if (packFile != null) {
+                        log.debug("PackFile {} is removed because it {}", packFile.getPackName(), cause);
+                        packFile.close();
+                    }})
                 .maximumSize(cacheEntrySize)
                 .expireAfterAccess(cacheConfig.getPackFileExpireSeconds(), TimeUnit.SECONDS)
                 .recordStats()
@@ -64,7 +72,7 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
 
         DfsPackFile newPackFile = new DfsPackFile(this, description, key != null ? key : new DfsPackKey());
         packFileCache.put(description, newPackFile);
-        return newPackFile;
+        return getOrCreate(description, key);
     }
 
     int getBlockSize() {
@@ -139,6 +147,25 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
         public long getPosition() {
             return position;
         }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof DfsPackKeyWithPosition)) {
+                return false;
+            }
+            DfsPackKeyWithPosition that = (DfsPackKeyWithPosition) other;
+            return Objects.equals(this.getDfsPackKey(), that.getDfsPackKey())
+                    && this.getPosition() == that.getPosition();
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(this.getDfsPackKey(), this.getPosition());
+        }
+
     }
 
     static final class Ref<T> extends DfsBlockCache.Ref<T> {
