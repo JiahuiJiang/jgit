@@ -2,18 +2,19 @@ package org.eclipse.jgit.internal.storage.dfs;
 
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class DfsBlockCache {
 
-    private static volatile DfsBlockCache cache;
+    private static volatile AtomicReference<DfsBlockCache> cache;
 
     static {
+        cache = new AtomicReference<>();
         DefaultDfsBlockCache.reconfigure(new DefaultDfsBlockCacheConfig());
     }
 
-    public static void resetCache(DfsBlockCache newCache) {
-        DfsBlockCache oldCache = cache;
-        cache = newCache;
+    public static void setInstance(DfsBlockCache newCache) {
+        DfsBlockCache oldCache = cache.getAndSet(newCache);
 
         if (oldCache != null) {
             oldCache.cleanUp();
@@ -24,7 +25,7 @@ public abstract class DfsBlockCache {
      * @return the currently active DfsBlockCache.
      */
     public static DfsBlockCache getInstance() {
-        return cache;
+        return cache.get();
     }
 
     abstract boolean shouldCopyThroughCache(long length);

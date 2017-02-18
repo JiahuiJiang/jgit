@@ -145,7 +145,7 @@ public final class DefaultDfsBlockCache extends DfsBlockCache {
 	private volatile long liveBytes;
 
 	public static void reconfigure(final DefaultDfsBlockCacheConfig cfg) {
-		DfsBlockCache.resetCache(new DefaultDfsBlockCache(cfg));
+		DfsBlockCache.setInstance(new DefaultDfsBlockCache(cfg));
 	}
 
 	@SuppressWarnings("unchecked")
