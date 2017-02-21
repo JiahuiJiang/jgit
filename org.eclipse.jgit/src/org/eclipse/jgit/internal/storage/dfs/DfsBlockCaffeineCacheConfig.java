@@ -1,21 +1,16 @@
 package org.eclipse.jgit.internal.storage.dfs;
 
-import org.eclipse.jgit.internal.JGitText;
-
 // TODO: switch to Immutable when we move it internal and can add more external dependencies
 public class DfsBlockCaffeineCacheConfig {
 
     private final int blockSize;
     private final long cacheMaximumSize;
-    private final int packFileExpireSeconds;
     private final double streamRatio;
 
-    public DfsBlockCaffeineCacheConfig(
-            int blockSize, long cacheMaximumSize, int packFileExpireSeconds, double streamRatio) {
+    public DfsBlockCaffeineCacheConfig(int blockSize, long cacheMaximumSize, double streamRatio) {
         checkValues(blockSize);
         this.blockSize = blockSize;
         this.cacheMaximumSize = cacheMaximumSize;
-        this.packFileExpireSeconds = packFileExpireSeconds;
         this.streamRatio = streamRatio;
     }
 
@@ -25,10 +20,6 @@ public class DfsBlockCaffeineCacheConfig {
 
     public long getCacheMaximumSize() {
         return cacheMaximumSize;
-    }
-
-    public int getPackFileExpireSeconds() {
-        return packFileExpireSeconds;
     }
 
     public double getStreamRatio() {

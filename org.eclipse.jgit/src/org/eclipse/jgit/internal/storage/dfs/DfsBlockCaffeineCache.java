@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 public final class DfsBlockCaffeineCache extends DfsBlockCache {
 
@@ -33,29 +32,38 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
     /** Cache of Dfs blocks. */
     private final Cache<DfsPackKeyWithPosition, Ref> dfsBlockCache;
 
-    private DfsBlockCaffeineCache(DfsBlockCaffeineCacheConfig cacheConfig) {
-        // this is an estimation since it's hard to evaluation the actual size of the indices in packFiles
-        long cacheEntrySize = (cacheConfig.getCacheMaximumSize() / cacheConfig.getBlockSize()) / 2;
+    public static void reconfigure(final DfsBlockCaffeineCacheConfig cacheConfig) {
+        DfsBlockCache.setInstance(new DfsBlockCaffeineCache(cacheConfig));
+    }
 
+    private DfsBlockCaffeineCache(DfsBlockCaffeineCacheConfig cacheConfig) {
         maxStreamThroughCache = (long) (cacheConfig.getCacheMaximumSize() * cacheConfig.getStreamRatio());
 
         blockSize = cacheConfig.getBlockSize();
 
         // TODO: register the cache and expose the stats
+        // the estimated retained bytes is estimated based on the fields each object contains
         packFileCache = Caffeine.newBuilder()
                 .removalListener((DfsPackDescription description, DfsPackFile packFile, RemovalCause cause) -> {
                     if (packFile != null) {
                         log.debug("PackFile {} is removed because it {}", packFile.getPackName(), cause);
+                        packFile.key.cachedSize.set(0);
                         packFile.close();
                     }})
-                .maximumSize(cacheEntrySize)
-                .expireAfterAccess(cacheConfig.getPackFileExpireSeconds(), TimeUnit.SECONDS)
+                .maximumWeight(cacheConfig.getCacheMaximumSize() / 2)
+                .weigher((DfsPackDescription description, DfsPackFile packFile) -> {
+                    // weight is static after creation and update, so here we are relying on dfsBlockCache's removal
+                    // listen to make sure the retained size of packFile won't exceed the given memory
+                    long estimatedSize = 2048 + blockSize;
+                    return estimatedSize > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) estimatedSize;
+                })
                 .recordStats()
                 .build();
 
         dfsBlockCache = Caffeine.newBuilder()
-                .maximumSize(cacheEntrySize)
-                .expireAfterAccess(cacheConfig.getPackFileExpireSeconds(), TimeUnit.SECONDS)
+                .removalListener((DfsPackKeyWithPosition keyWithPosition, Ref ref, RemovalCause cause) -> ref = null)
+                .maximumWeight(cacheConfig.getCacheMaximumSize() / 2)
+                .weigher((DfsPackKeyWithPosition keyWithPosition, Ref ref) -> ref == null? 48 : 48 + ref.getSize())
                 .recordStats()
                 .build();
     }
@@ -87,7 +95,9 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
         Ref<DfsBlock> loadedBlockRef = dfsBlockCache.get(new DfsPackKeyWithPosition(key, position), keyWithPosition -> {
             try {
                 DfsBlock loadedBlock = pack.readOneBlock(keyWithPosition.getPosition(), dfsReader);
-                return new Ref(keyWithPosition.getDfsPackKey(), keyWithPosition.getPosition(), blockSize, loadedBlock);
+                key.cachedSize.getAndAdd(loadedBlock.size());
+                return new Ref(keyWithPosition.getDfsPackKey(), keyWithPosition.getPosition(),
+                        loadedBlock.size(), loadedBlock);
             } catch (IOException e) {
                 return null;
             }
@@ -108,8 +118,8 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
     }
 
     public <T> Ref<T> put(DfsPackKey key, long position, int size, T value) {
-        return dfsBlockCache.get(new DfsPackKeyWithPosition(key, position),
-                keyWithPosition -> new Ref(key, position, size, value));
+        return dfsBlockCache.get(new DfsPackKeyWithPosition(key, position), keyWithPosition ->
+                new Ref(keyWithPosition.getDfsPackKey(), keyWithPosition.getPosition(), size, value));
     }
 
     boolean contains(DfsPackKey key, long position) {
@@ -168,7 +178,7 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
 
     }
 
-    static final class Ref<T> extends DfsBlockCache.Ref<T> {
+    public static final class Ref<T> extends DfsBlockCache.Ref<T> {
         final DfsPackKey key;
         final long position;
         final int size;
@@ -187,6 +197,10 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
 
         boolean has() {
             return value != null;
+        }
+
+        int getSize() {
+            return size;
         }
     }
 }
