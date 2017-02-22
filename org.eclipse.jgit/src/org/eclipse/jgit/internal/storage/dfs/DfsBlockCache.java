@@ -6,10 +6,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class DfsBlockCache {
 
-    private static volatile AtomicReference<DfsBlockCache> cache;
+    private static volatile AtomicReference<DfsBlockCache> cache = new AtomicReference<>();
 
     static {
-        cache = new AtomicReference<>();
         DefaultDfsBlockCache.reconfigure(new DefaultDfsBlockCacheConfig());
     }
 
