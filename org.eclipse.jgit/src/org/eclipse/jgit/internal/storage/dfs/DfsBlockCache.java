@@ -27,6 +27,10 @@ public abstract class DfsBlockCache {
         return cache.get();
     }
 
+    void put(DfsBlock v) {
+        put(v.pack, v.start, v.size(), v);
+    }
+
     abstract boolean shouldCopyThroughCache(long length);
 
     abstract int getBlockSize();
@@ -34,8 +38,6 @@ public abstract class DfsBlockCache {
     abstract DfsPackFile getOrCreate(DfsPackDescription description, DfsPackKey key);
 
     abstract DfsBlock getOrLoad(DfsPackFile pack, long position, DfsReader ctx) throws IOException;
-
-    abstract void put(DfsBlock v);
 
     abstract <T> DfsBlockCache.Ref<T> put(DfsPackKey key, long pos, int size, T v);
 
@@ -47,7 +49,7 @@ public abstract class DfsBlockCache {
 
     abstract void cleanUp();
 
-    static abstract class Ref<T> {
+    public static abstract class Ref<T> {
         abstract T get();
 
         abstract boolean has();

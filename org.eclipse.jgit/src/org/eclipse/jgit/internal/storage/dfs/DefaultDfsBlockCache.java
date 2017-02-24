@@ -284,7 +284,7 @@ public final class DefaultDfsBlockCache extends DfsBlockCache {
 		final long requestedPosition = position;
 		position = pack.alignToBlock(position);
 
-		DfsPackKey key = pack.key;
+		DfsPackKey key = pack.getKey();
 		int slot = slot(key, position);
 		HashEntry e1 = table.get(slot);
 		DfsBlock v = scan(e1, key, position);
@@ -323,7 +323,7 @@ public final class DefaultDfsBlockCache extends DfsBlockCache {
 				e2 = table.get(slot);
 			}
 
-			key.cachedSize.addAndGet(v.size());
+			key.getCachedSize().addAndGet(v.size());
 			Ref<DfsBlock> ref = new Ref<DfsBlock>(key, position, v.size(), v);
 			ref.hot = true;
 			for (;;) {
@@ -339,7 +339,7 @@ public final class DefaultDfsBlockCache extends DfsBlockCache {
 
 		// If the block size changed from the default, it is possible the block
 		// that was loaded is the wrong block for the requested position.
-		if (v.contains(pack.key, requestedPosition))
+		if (v.contains(pack.getKey(), requestedPosition))
 			return v;
 		return getOrLoad(pack, requestedPosition, ctx);
 	}
@@ -371,7 +371,7 @@ public final class DefaultDfsBlockCache extends DfsBlockCache {
 					dead.next = null;
 					dead.value = null;
 					live -= dead.size;
-					dead.pack.cachedSize.addAndGet(-dead.size);
+					dead.pack.getCachedSize().addAndGet(-dead.size);
 					statEvict++;
 				} while (maxBytes < live);
 				clockHand = prev;
@@ -402,10 +402,6 @@ public final class DefaultDfsBlockCache extends DfsBlockCache {
 		}
 	}
 
-	void put(DfsBlock v) {
-		put(v.pack, v.start, v.size(), v);
-	}
-
 	<T> Ref<T> put(DfsPackKey key, long pos, int size, T v) {
 		int slot = slot(key, pos);
 		HashEntry e1 = table.get(slot);
@@ -426,7 +422,7 @@ public final class DefaultDfsBlockCache extends DfsBlockCache {
 				}
 			}
 
-			key.cachedSize.addAndGet(size);
+			key.getCachedSize().addAndGet(size);
 			ref = new Ref<T>(key, pos, size, v);
 			ref.hot = true;
 			for (;;) {
@@ -496,7 +492,7 @@ public final class DefaultDfsBlockCache extends DfsBlockCache {
 
 	void cleanUp() {
 		for (DfsPackFile pack : getPackFiles())
-			pack.key.cachedSize.set(0);
+			pack.getKey().getCachedSize().set(0);
 	}
 
 	private static final class HashEntry {

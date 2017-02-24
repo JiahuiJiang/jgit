@@ -53,7 +53,7 @@ import java.util.zip.Inflater;
 import org.eclipse.jgit.internal.storage.pack.PackOutputStream;
 
 /** A cached slice of a {@link DfsPackFile}. */
-final class DfsBlock {
+public final class DfsBlock {
 	final DfsPackKey pack;
 
 	final long start;
@@ -69,11 +69,11 @@ final class DfsBlock {
 		block = buf;
 	}
 
-	int size() {
+	public int size() {
 		return block.length;
 	}
 
-	boolean contains(DfsPackKey want, long pos) {
+	public boolean contains(DfsPackKey want, long pos) {
 		return pack == want && start <= pos && pos < end;
 	}
 
