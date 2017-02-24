@@ -113,7 +113,7 @@ public final class DfsPackFile {
 	private final DfsPackDescription packDesc;
 
 	/** Unique identity of this pack while in-memory. */
-	final DfsPackKey key;
+	private final DfsPackKey key;
 
 	/**
 	 * Total number of bytes in this pack file.
@@ -170,7 +170,7 @@ public final class DfsPackFile {
 	 * @param key
 	 *            interned key used to identify blocks in the block cache.
 	 */
-	DfsPackFile(DfsBlockCache cache, DfsPackDescription desc, DfsPackKey key) {
+	public DfsPackFile(DfsBlockCache cache, DfsPackDescription desc, DfsPackKey key) {
 		this.cache = cache;
 		this.packDesc = desc;
 		this.key = key;
@@ -183,6 +183,11 @@ public final class DfsPackFile {
 	/** @return description that was originally used to configure this pack file. */
 	public DfsPackDescription getPackDescription() {
 		return packDesc;
+	}
+
+	/** @return key that uniquely identifies this pack while in-memory. */
+	public DfsPackKey getKey() {
+		return key;
 	}
 
 	/**
@@ -733,7 +738,7 @@ public final class DfsPackFile {
 		}
 	}
 
-	boolean invalid() {
+	public boolean invalid() {
 		return invalid;
 	}
 

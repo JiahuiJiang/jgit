@@ -402,10 +402,6 @@ public final class DefaultDfsBlockCache extends DfsBlockCache {
 		}
 	}
 
-	void put(DfsBlock v) {
-		put(v.pack, v.start, v.size(), v);
-	}
-
 	<T> Ref<T> put(DfsPackKey key, long pos, int size, T v) {
 		int slot = slot(key, pos);
 		HashEntry e1 = table.get(slot);
