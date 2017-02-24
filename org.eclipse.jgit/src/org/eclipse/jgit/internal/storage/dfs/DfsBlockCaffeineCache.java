@@ -11,6 +11,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class DfsBlockCaffeineCache extends DfsBlockCache {
 
+    // the estimated retained bytes is estimated based on the fields each object contains
+    // plus the key/entry reference itself
+    // DfsPackKey: {
+    //   final int hash;                4 bytes
+    //   final AtomicLong cachedSize;   28 bytes
+    // }
+    // final long position;             8 bytes
+    // final int size;                  4 bytes
+    // key, value reference             8 * 2 bytes
+    private static final int ESTIMATED_EMPTY_ENTRY_SIZE = 60;
+
     /** Pack files smaller than this size can be copied through the cache. */
     private final long maxStreamThroughCache;
 
@@ -26,8 +37,12 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
      */
     private final int blockSize;
 
-    /** Cache of pack files, indexed by description. */
-    private final Map<DfsPackDescription, DfsPackFile> packFileCache;
+    /**
+     * Map of pack files, indexed by description.
+     * <p>
+     * TODO: right now an entry won't get cleared if there is never a ref loaded then evicted.
+     */
+    private final Map<DfsPackDescription, DfsPackFile> packFileMap;
 
     /** Reverse index from DfsPackKey to the DfsPackDescription. */
     private final Map<DfsPackKey, DfsPackDescription> reversePackDescriptionIndex;
@@ -44,22 +59,14 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
 
         blockSize = cacheConfig.getBlockSize();
 
-        packFileCache = new ConcurrentHashMap<>(16, 0.75f, 1);
-        reversePackDescriptionIndex = new ConcurrentHashMap<>(16, 0.75f, 1);
+        packFileMap = new ConcurrentHashMap();
+        reversePackDescriptionIndex = new ConcurrentHashMap();
 
         dfsBlockAndIndicesCache = Caffeine.newBuilder()
                 .removalListener(this::cleanUpIndices)
                 .maximumWeight(cacheConfig.getCacheMaximumSize())
-                // the estimated retained bytes is estimated based on the fields each object contains
-                // plus the key/entry reference itself
-                // DfsPackKey: {
-                //   final int hash;                4 bytes
-                //   final AtomicLong cachedSize;   28 bytes
-                // }
-                // final long position;             8 bytes
-                // final int size;                  4 bytes
-                // key, value reference             8 * 2 bytes
-                .weigher((DfsPackKeyWithPosition keyWithPosition, Ref ref) -> ref == null? 60 : 60 + ref.getSize())
+                .weigher((DfsPackKeyWithPosition keyWithPosition, Ref ref) ->
+                        ref == null? ESTIMATED_EMPTY_ENTRY_SIZE : ESTIMATED_EMPTY_ENTRY_SIZE + ref.getSize())
                 .recordStats()
                 .build();
     }
@@ -86,7 +93,7 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
         if (key != null) {
             DfsPackDescription description = reversePackDescriptionIndex.remove(key);
             if (description != null) {
-                packFileCache.remove(description);
+                packFileMap.remove(description);
             }
         }
     }
@@ -96,7 +103,7 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
     }
 
     DfsPackFile getOrCreate(DfsPackDescription description, DfsPackKey key) {
-        return packFileCache.compute(description, (DfsPackDescription k, DfsPackFile v) -> {
+        return packFileMap.compute(description, (DfsPackDescription k, DfsPackFile v) -> {
             if (v != null && !v.invalid()) {
                 return v;
             }
@@ -110,7 +117,6 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
         return blockSize;
     }
 
-    // do something when the block is invalid
     DfsBlock getOrLoad(DfsPackFile pack, long position, DfsReader dfsReader) throws IOException {
         final long requestedPosition = position;
         position = pack.alignToBlock(position);
@@ -166,15 +172,15 @@ public final class DfsBlockCaffeineCache extends DfsBlockCache {
     void remove(DfsPackFile pack) {
         if (pack != null) {
             DfsPackKey key = pack.key;
-            cleanUpIndicesIfExists(key);
             key.cachedSize.set(0);
+            cleanUpIndicesIfExists(key);
         }
         // TODO: release all the blocks cached for this pack file too
         // right now those refs are not accessible anymore and will be evicted by caffeine cache eventually
     }
 
     void cleanUp() {
-        packFileCache.clear();
+        packFileMap.clear();
         reversePackDescriptionIndex.clear();
         dfsBlockAndIndicesCache.invalidateAll();
     }

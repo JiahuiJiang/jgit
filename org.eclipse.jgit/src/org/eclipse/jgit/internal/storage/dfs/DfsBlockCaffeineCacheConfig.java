@@ -4,7 +4,14 @@ package org.eclipse.jgit.internal.storage.dfs;
 public class DfsBlockCaffeineCacheConfig {
 
     private final int blockSize;
+
+    /**
+     * The actual size of the cache can exceed this maximum size set depends on how many pack files
+     * are cached and how many objects they contain.
+     * The exceeded size should be less than { 1KB * number of pack files + 128 bytes * number of objects }.
+     */
     private final long cacheMaximumSize;
+
     private final double streamRatio;
 
     public DfsBlockCaffeineCacheConfig(int blockSize, long cacheMaximumSize, double streamRatio) {
